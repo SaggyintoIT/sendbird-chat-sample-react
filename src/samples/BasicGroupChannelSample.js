@@ -183,8 +183,8 @@ const BasicGroupChannelSample = (props) => {
     }
 
     const handleCreateChannel = async (channelName = "Channel") => {
-        const userNickname = sb.currentUser.nickname || "Sagar"; // Get the user's nickname or default to "Sagar"
-        const channelCount = state.channels.length + 1; // Get the next channel number
+        const userNickname = sb.currentUser.nickname || "Sagar"; 
+        const channelCount = state.channels.length + 1; 
         const formattedChannelName = `Channel ${channelCount} `;
     
         const [groupChannel, error] = await createChannel(formattedChannelName, state.groupChannelMembers);
@@ -400,7 +400,7 @@ const ChannelList = ({
                         <div
                             className="channel-list-item-name"
                             onClick={() => { handleJoinChannel(channel.url) }}>
-                            {/* Display channel name and customType */}
+                           
                             <div className="channel-name">
                                 {channel.name} {channel.customType ? `(${channel.customType})` : ""}
                             </div>
@@ -621,7 +621,7 @@ const CreateUserForm = ({
     }
 }
 
-// Helpful functions that call Sendbird
+
 const loadChannels = async (channelHandlers, messageHandlers) => {
     const groupChannelFilter = new GroupChannelFilter();
     groupChannelFilter.includeEmpty = true;
@@ -671,12 +671,12 @@ const inviteUsersToChannel = async (channel, userIds) => {
 
 const createChannel = async (channelName, userIdsToInvite) => {
     try {
-        const userNickname =  "Sagar"; // Default to "Sagar"
+        const userNickname =  "Sagar"; 
         const groupChannelParams = {
             invitedUserIds: userIdsToInvite,
             name: channelName,
             operatorUserIds: userIdsToInvite,
-            customType: userNickname // Store the customType as the user's first name
+            customType: userNickname 
         };
         const groupChannel = await sb.groupChannel.createChannel(groupChannelParams);
         return [groupChannel, null];
