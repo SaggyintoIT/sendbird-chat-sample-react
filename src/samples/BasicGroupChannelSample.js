@@ -67,10 +67,26 @@ const BasicGroupChannelSample = (props) => {
     const messageHandlers = {
         onMessagesAdded: (context, channel, messages) => {
             const updatedMessages = [...stateRef.current.messages, ...messages];
-
             updateState({ ...stateRef.current, messages: updatedMessages });
-
+    
+            
+            if (messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+    
+                console.log("🔔 New message received:", lastMessage.message);
+    
+                if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification(`New Message in ${channel.name}`, {
+                        body: `${lastMessage.sender.nickname}: ${lastMessage.message}`,
+                        icon: "/icon.png" 
+                    });
+                    console.log("✅ Notification displayed.");
+                } else {
+                    console.log("❌ Notification permission not granted.");
+                }
+            }
         },
+    
         onMessagesUpdated: (context, channel, messages) => {
             const updatedMessages = [...stateRef.current.messages];
             for (let i in messages) {
@@ -78,7 +94,7 @@ const BasicGroupChannelSample = (props) => {
                 const indexOfExisting = stateRef.current.messages.findIndex(message => {
                     return incomingMessage.reqId === message.reqId;
                 });
-
+    
                 if (indexOfExisting !== -1) {
                     updatedMessages[indexOfExisting] = incomingMessage;
                 }
@@ -86,26 +102,24 @@ const BasicGroupChannelSample = (props) => {
                     updatedMessages.push(incomingMessage);
                 }
             }
-
-
+    
             updateState({ ...stateRef.current, messages: updatedMessages });
         },
+    
         onMessagesDeleted: (context, channel, messageIds) => {
             const updateMessages = stateRef.current.messages.filter((message) => {
                 return !messageIds.includes(message.messageId);
             });
             updateState({ ...stateRef.current, messages: updateMessages });
-
         },
-        onChannelUpdated: (context, channel) => {
-
-        },
-        onChannelDeleted: (context, channelUrl) => {
-        },
-        onHugeGapDetected: () => {
-        }
-    }
-
+    
+        onChannelUpdated: (context, channel) => {},
+    
+        onChannelDeleted: (context, channelUrl) => {},
+    
+        onHugeGapDetected: () => {}
+    };
+    
     const scrollToBottom = (item, smooth) => {
         item?.scrollTo({
             top: item.scrollHeight,
@@ -120,7 +134,17 @@ const BasicGroupChannelSample = (props) => {
     useEffect(() => {
         scrollToBottom(channelRef.current, 'smooth')
     }, [state.messages])
-
+    useEffect(() => {
+        if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+            Notification.requestPermission().then((permission) => {
+                if (permission === "granted") {
+                    console.log("Notification permission granted.");
+                } else {
+                    console.log("Notification permission denied.");
+                }
+            });
+        }
+    }, []);
     const onError = (error) => {
         updateState({ ...state, error: error.message });
         console.log(error);
@@ -158,13 +182,17 @@ const BasicGroupChannelSample = (props) => {
         updateState({ ...state, currentlyJoinedChannel: null })
     }
 
-    const handleCreateChannel = async (channelName = "testChannel",) => {
-        const [groupChannel, error] = await createChannel(channelName, state.groupChannelMembers);
+    const handleCreateChannel = async (channelName = "Channel") => {
+        const userNickname = sb.currentUser.nickname || "Sagar"; // Get the user's nickname or default to "Sagar"
+        const channelCount = state.channels.length + 1; // Get the next channel number
+        const formattedChannelName = `Channel ${channelCount} `;
+    
+        const [groupChannel, error] = await createChannel(formattedChannelName, state.groupChannelMembers);
         if (error) {
             return onError(error);
         }
-    }
-
+    };
+    
     const handleUpdateChannelMembersList = async () => {
         const { currentlyJoinedChannel, groupChannelMembers } = state;
         await inviteUsersToChannel(currentlyJoinedChannel, groupChannelMembers);
@@ -282,7 +310,8 @@ const BasicGroupChannelSample = (props) => {
 
         sb = sendbirdChat;
         updateState({ ...state, loading: true });
-        const [channels, error] = await loadChannels(channelHandlers);
+        const [channels, error] = await loadChannels(channelHandlers, messageHandlers);
+
         if (error) {
             return onError(error);
         }
@@ -371,7 +400,10 @@ const ChannelList = ({
                         <div
                             className="channel-list-item-name"
                             onClick={() => { handleJoinChannel(channel.url) }}>
-                            <ChannelName members={channel.members} />
+                            {/* Display channel name and customType */}
+                            <div className="channel-name">
+                                {channel.name} {channel.customType ? `(${channel.customType})` : ""}
+                            </div>
                             <div className="last-message">{channel.lastMessage?.message}</div>
                         </div>
                         <div>
@@ -382,8 +414,9 @@ const ChannelList = ({
                     </div>
                 );
             })}
-        </div >);
-}
+        </div>
+    );
+};
 
 const ChannelName = ({ members }) => {
     const membersToDisplay = members.slice(0, 2);
@@ -400,7 +433,10 @@ const ChannelName = ({ members }) => {
 const Channel = ({ currentlyJoinedChannel, children, handleLeaveChannel, channelRef }) => {
     if (currentlyJoinedChannel) {
         return <div className="channel" ref={channelRef}>
-            <ChannelHeader>{currentlyJoinedChannel.name}</ChannelHeader>
+          <ChannelHeader customType={currentlyJoinedChannel.customType}>
+    {currentlyJoinedChannel.name}
+</ChannelHeader>
+
             <div>
                 <button className="leave-channel" onClick={handleLeaveChannel}>Leave Channel</button>
             </div>
@@ -410,9 +446,12 @@ const Channel = ({ currentlyJoinedChannel, children, handleLeaveChannel, channel
     return <div className="channel"></div>;
 }
 
-const ChannelHeader = ({ children }) => {
-    return <div className="channel-header">{children}</div>;
-}
+const ChannelHeader = ({ children, customType }) => {
+    return <div className="channel-header">
+        {children} {customType ? `(${customType})` : ""}
+    </div>;
+};
+
 
 const MembersList = ({ channel, handleMemberInvite }) => {
     if (channel) {
@@ -583,9 +622,10 @@ const CreateUserForm = ({
 }
 
 // Helpful functions that call Sendbird
-const loadChannels = async (channelHandlers) => {
+const loadChannels = async (channelHandlers, messageHandlers) => {
     const groupChannelFilter = new GroupChannelFilter();
     groupChannelFilter.includeEmpty = true;
+    groupChannelFilter.customTypeFilter = ["Sagar"]; 
 
     const collection = sb.groupChannel.createGroupChannelCollection({
         filter: groupChannelFilter,
@@ -595,8 +635,18 @@ const loadChannels = async (channelHandlers) => {
     collection.setGroupChannelCollectionHandler(channelHandlers);
 
     const channels = await collection.loadMore();
-    return [channels, null];
-}
+
+    
+    channels.forEach(channel => {
+        channel.createMessageCollection({})
+            .setMessageCollectionHandler(messageHandlers);
+    });
+
+    console.log("✅ Message handlers attached to all filtered channels.");
+    
+    return [channels.filter(channel => channel.customType), null];
+};
+
 
 const loadMessages = (channel, messageHandlers, onCacheResult, onApiResult) => {
     const messageFilter = new MessageFilter();
@@ -621,16 +671,20 @@ const inviteUsersToChannel = async (channel, userIds) => {
 
 const createChannel = async (channelName, userIdsToInvite) => {
     try {
-        const groupChannelParams = {};
-        groupChannelParams.invitedUserIds = userIdsToInvite;
-        groupChannelParams.name = channelName;
-        groupChannelParams.operatorUserIds = userIdsToInvite;
+        const userNickname =  "Sagar"; // Default to "Sagar"
+        const groupChannelParams = {
+            invitedUserIds: userIdsToInvite,
+            name: channelName,
+            operatorUserIds: userIdsToInvite,
+            customType: userNickname // Store the customType as the user's first name
+        };
         const groupChannel = await sb.groupChannel.createChannel(groupChannelParams);
         return [groupChannel, null];
     } catch (error) {
         return [null, error];
     }
-}
+};
+
 
 const deleteChannel = async (channelUrl) => {
     try {
